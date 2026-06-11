@@ -1,0 +1,158 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String     @id @default(uuid())
+  email     String     @unique
+  password  String
+  role      String     @default("ADMIN")
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  auditLogs AuditLog[]
+
+  @@map("users")
+}
+
+model Fingerprint {
+  id             String   @id // The calculated primary Fingerprint ID (e.g. SHA256 Hash V2)
+  hashV1         String
+  hashV2         String
+  stableHash     String
+  similarityHash String
+  privacyHash    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  visits         Visit[]
+
+  @@index([hashV1])
+  @@index([stableHash])
+  @@map("fingerprints")
+}
+
+model Visit {
+  id            String         @id @default(uuid())
+  fingerprintId String
+  fingerprint   Fingerprint    @relation(fields: [fingerprintId], references: [id], onDelete: Cascade)
+  ipAddress     String
+  country       String         @default("Unknown")
+  region        String         @default("Unknown")
+  city          String         @default("Unknown")
+  timezone      String         @default("UTC")
+  userAgent     String
+  createdAt     DateTime       @default(now())
+  signals       Signal?
+  botAnalysis   BotAnalysis?
+  vpnAnalysis   VpnAnalysis?
+  privacyReport PrivacyReport?
+
+  @@index([fingerprintId])
+  @@index([createdAt])
+  @@map("visits")
+}
+
+model Signal {
+  id             String   @id @default(uuid())
+  visitId        String   @unique
+  visit          Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  rawJson        Json     // Full raw collected signals
+  normalizedJson Json     // Normalized values for comparison
+  browserName    String
+  browserVersion String
+  osName         String
+  osVersion      String
+  deviceType     String
+  canvasHash     String
+  webglVendor    String
+  webglRenderer  String
+  audioHash      String
+  fontsHash      String
+
+  @@map("signals")
+}
+
+model BotAnalysis {
+  id              String   @id @default(uuid())
+  visitId         String   @unique
+  visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  webdriver       Boolean  @default(false)
+  headless        Boolean  @default(false)
+  automationTool  String   @default("None")
+  timingAnomaly   Boolean  @default(false)
+  humanScore      Float    @default(1.0)
+  botScore        Float    @default(0.0)
+  confidenceScore Float    @default(1.0)
+  riskScore       Float    @default(0.0)
+  classification  String   @default("Human") // Human, Likely Human, Suspicious, Likely Bot
+  explanations    Json     // Array of strings detailing the assessment flags
+
+  @@map("bot_analyses")
+}
+
+model VpnAnalysis {
+  id               String   @id @default(uuid())
+  visitId          String   @unique
+  visit            Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  isVpn            Boolean  @default(false)
+  isProxy          Boolean  @default(false)
+  isTor            Boolean  @default(false)
+  isDatacenter     Boolean  @default(false)
+  webrtcLeak       Boolean  @default(false)
+  timezoneMismatch Boolean  @default(false)
+  isp              String   @default("Unknown")
+  confidenceScore  Float    @default(1.0)
+  explanation      String   @default("")
+
+  @@map("vpn_analyses")
+}
+
+model PrivacyReport {
+  id              String   @id @default(uuid())
+  visitId         String   @unique
+  visit           Visit    @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  trackability    Float    @default(0.0)
+  exposureRisk    Float    @default(0.0)
+  stabilityScore  Float    @default(1.0)
+  uniquenessRisk  Float    @default(0.0)
+  riskLevel       String   @default("Low") // Low, Medium, High, Critical
+  recommendations Json     // Array of recommendations strings
+
+  @@map("privacy_reports")
+}
+
+model EntropyScore {
+  id                 String   @id @default(uuid())
+  signalName         String   @unique // e.g. "canvas", "fonts", "timezone", "languages", "webgl"
+  shannonEntropy     Float
+  uniquenessScore    Float
+  populationEstimate String
+  updatedAt          DateTime @updatedAt
+
+  @@map("entropy_scores")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  ipAddress String
+  details   String
+  createdAt DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
